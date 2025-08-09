@@ -7,6 +7,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('public'));
+app.use(express.static('.'));
 
 // ---- Simple in-memory rooms (for demo; use a DB for production) ----
 const rooms = new Map();
