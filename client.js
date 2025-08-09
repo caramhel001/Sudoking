@@ -175,6 +175,9 @@ socket.on("cell", ({r,c,n,correct})=>{
 
 // Grid & Notes rendering
 function buildGrid(){
+  // sync board width to keypad
+  const w = gridEl.getBoundingClientRect().width;
+  document.documentElement.style.setProperty('--board-w', Math.round(w)+'px');
   gridEl.innerHTML='';
   selected = null;
   for(let r=0;r<9;r++){
@@ -257,6 +260,8 @@ function buildPad(){
 
 function handleInput(n){
   if(!selected || gameOver) return;
+  // ensure selection exists even after layout changes
+  const [r,c]=selected; const cell = cellAt(r,c); if(!cell) return;
   const [r,c]=selected;
   if(puzzle[r][c]!==0) return; // can't edit final numbers or prefill
   if(notesMode){

@@ -62,3 +62,13 @@ input, select{padding:12px;border-radius:10px;border:1px solid var(--line);min-w
 .overlay .banner{background:#111827;color:#fff;padding:28px 32px;border-radius:16px;font-size:28px;font-weight:900;box-shadow:0 12px 40px rgba(0,0,0,.4)}
 
 @media (max-width:390px){ .key{min-height:44px;font-size:16px;padding:10px 6px} }
+
+.board,.pad-wrap{display:flex;justify-content:center}
+.pad-wrap{width:100%}
+:root{ --board-w: 520px; }
+.grid{ width: min(92vw, var(--board-w)); }
+.pad{ width: min(92vw, var(--board-w)); gap: 6px; }
+.key{ padding: 14px 8px; min-height: 52px; }
+@media (max-width: 420px){
+  .key{ min-height: 46px; padding: 12px 6px; font-size:16px }
+}
