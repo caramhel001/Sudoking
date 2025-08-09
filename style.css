@@ -1,20 +1,49 @@
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f7f8fb;color:#0f172a}
+:root{ --accent:#2563eb; --bg:#f7f8fb; --ink:#0f172a; --muted:#64748b; --error:#ef4444; --ok:#16a34a; --card:#ffffff; --line:#e5e7eb; --thick:#94a3b8; }
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg)}
 .wrap{max-width:980px;margin:0 auto;padding:16px}
-.card{background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08);padding:16px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.btn{border:none;border-radius:10px;padding:10px 12px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}
-input{padding:10px;border-radius:10px;border:1px solid #e5e7eb}
+.top{display:flex;justify-content:center;align-items:center;margin:4px 0 10px}
+h1{font-size:30px;margin:6px 0}
+.card{background:var(--card);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08);padding:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:6px 0}
+.space-between{justify-content:space-between}
+input{padding:12px;border-radius:10px;border:1px solid var(--line);min-width:240px}
+.btn{border:none;border-radius:10px;padding:10px 14px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}
+.btn.outline{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.ghost{background:#fff;color:var(--muted);border:1px solid var(--line)}
 .badge{padding:6px 10px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-weight:700}
+.muted{color:var(--muted)}
+.hidden{display:none}
+
+.sheet{margin-top:8px;border-top:1px dashed var(--line);padding-top:8px}
+.roomlist{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto;margin:6px 0}
+.room{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:10px}
+
 .players{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-.p{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:6px 10px}
-.grid{display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);width:min(92vw,520px);aspect-ratio:1/1;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin:12px 0}
-.cell{display:flex;align-items:center;justify-content:center;border:1px solid #e5e7eb;user-select:none;position:relative}
-.cell.prefill{background:#f3f4f6;font-weight:700}
+.p{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+
+.board{display:flex;justify-content:center;align-items:center;margin:10px 0}
+.grid{display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);width:min(92vw,520px);aspect-ratio:1/1;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.cell{display:flex;align-items:center;justify-content:center;border:1px solid var(--line);user-select:none;position:relative;font-weight:700}
+.cell.prefill{background:#f3f4f6}
 .cell.error{background:#ffe4e6}
 .cell.flash{animation: flashGreen .6s ease}
 @keyframes flashGreen { 0%{background:#ecfdf5} 100%{background:transparent} }
-.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(92vw,520px)}
+
+/* Emphasize 3x3 subgrid borders */
+.cell.thick-r{border-right:2px solid var(--thick)}
+.cell.thick-b{border-bottom:2px solid var(--thick)}
+
+.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(92vw,520px);margin:8px auto 0}
 .key{background:#fff;border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.08);padding:14px;font-size:18px;font-weight:700;text-align:center;cursor:pointer;user-select:none}
 .key-wide{grid-column: span 3; padding:16px; font-size:18px;}
 .key.active{background:#e0f2fe; outline:2px solid #38bdf8;}
 .announce{min-height:28px;margin:8px 0;color:#475569;transition:opacity .2s}
+
+@media (max-width: 480px){
+  h1{font-size:26px}
+  input{min-width:200px}
+  .grid{width:92vw}
+  .key{padding:12px;font-size:17px}
+}
