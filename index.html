@@ -3,30 +3,51 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sudoking — No Login</title>
+  <title>Sudoking — Office Races</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
-  <h1>🏗️ Sudoking — Office Races</h1>
-  <div class="card">
+  <header class="top"><h1>Sudoking</h1></header>
+
+  <!-- Lobby -->
+  <section class="card" id="lobby">
+    <div class="row"><input id="name" placeholder="Your name" /></div>
     <div class="row">
-      <input id="name" placeholder="Your name" />
-      <input id="room" placeholder="Room (e.g., TEAM1)" />
-      <button id="join" class="btn">Join</button>
-      <span id="status" class="badge">Not connected</span>
+      <button id="btnCreate" class="btn">Create room</button>
+      <button id="btnJoin" class="btn outline">Join room</button>
     </div>
-    <div id="announce" class="announce"></div>
-    <div class="row" style="margin-top:8px">
+
+    <div id="createBox" class="sheet hidden">
+      <div class="row"><input id="createRoom" placeholder="Room code (e.g., TEAM1)" /></div>
+      <div class="row"><input id="createPass" placeholder="Password (optional)" /></div>
+      <div class="row">
+        <button id="createGo" class="btn primary">Create</button>
+        <button id="createCancel" class="btn ghost">Cancel</button>
+      </div>
+    </div>
+
+    <div id="joinBox" class="sheet hidden">
+      <div class="row space-between">
+        <div class="muted">Available rooms</div>
+        <button id="refreshRooms" class="btn ghost">Refresh</button>
+      </div>
+      <div id="roomList" class="roomlist"></div>
+      <div class="row"><button id="joinCancel" class="btn ghost">Close</button></div>
+    </div>
+  </section>
+
+  <!-- Game -->
+  <section class="card hidden" id="game">
+    <div class="row">
       <div class="badge">Mistake limit: <span id="limit">5</span></div>
       <div class="badge">⏱ <span id="timer">00:00</span></div>
     </div>
-
     <div class="players" id="players"></div>
-    <div class="grid" id="grid"></div>
-
+    <div class="board"><div class="grid" id="grid"></div></div>
     <div class="pad" id="pad"></div>
-  </div>
+    <div class="announce" id="announce"></div>
+  </section>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
