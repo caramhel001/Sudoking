@@ -1,0 +1,151 @@
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
+
+app.use(express.static('public'));
+
+// ---- Simple in-memory rooms (for demo; use a DB for production) ----
+const rooms = new Map();
+
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
+function deepCopy(b){ return b.map(r=>r.slice()); }
+function findEmpty(b){ for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(b[r][c]===0) return [r,c]; return null; }
+function valid(b,r,c,n){
+  for(let i=0;i<9;i++){ if(b[r][i]===n||b[i][c]===n) return false; }
+  const br=Math.floor(r/3)*3, bc=Math.floor(c/3)*3;
+  for(let rr=0;rr<3;rr++) for(let cc=0;cc<3;cc++) if(b[br+rr][bc+cc]===n) return false;
+  return true;
+}
+function solve(b){
+  const pos=findEmpty(b); if(!pos) return true;
+  const [r,c]=pos; const nums=shuffle([1,2,3,4,5,6,7,8,9]);
+  for(const n of nums){ if(valid(b,r,c,n)){ b[r][c]=n; if(solve(b)) return true; b[r][c]=0; } }
+  return false;
+}
+function generateSolved(){
+  const b=Array.from({length:9},()=>Array(9).fill(0));
+  const row=shuffle([1,2,3,4,5,6,7,8,9]);
+  b[0]=row.slice(); solve(b); return b;
+}
+function makePuzzle(solved, holes=50){
+  const p=deepCopy(solved); let attempts=holes, guard=0;
+  while(attempts>0 && guard<6000){
+    guard++; const r=Math.floor(Math.random()*9), c=Math.floor(Math.random()*9);
+    if(p[r][c]===0) continue; const bak=p[r][c]; p[r][c]=0;
+    const copy=deepCopy(p); if(!ensureUnique(copy)){ p[r][c]=bak; } else attempts--;
+  }
+  return p;
+}
+function ensureUnique(board){
+  let count=0;
+  (function backtrack(){
+    if(count>=2) return;
+    const pos=findEmpty(board); if(!pos){ count++; return; }
+    const [r,c]=pos;
+    for(let n=1;n<=9;n++){ if(valid(board,r,c,n)){ board[r][c]=n; backtrack(); board[r][c]=0; if(count>=2) return; } }
+  })();
+  return count===1;
+}
+
+function newRoom(code, opts={}){
+  const solved = generateSolved();
+  const puzzle = makePuzzle(solved, opts.holes ?? 50);
+  const room = {
+    code,
+    createdAt: Date.now(),
+    solved,
+    puzzle,
+    players: new Map(), // id -> {name, progress, mistakes}
+    firstBlood: null,
+    startedAt: Date.now(),
+    mistakeLimit: opts.mistakeLimit ?? 5
+  };
+  rooms.set(code, room);
+  return room;
+}
+
+function computeProgress(puzzle, userBoard){
+  let filled=0, total=0;
+  for(let r=0;r<9;r++) for(let c=0;c<9;c++){
+    if(puzzle[r][c]===0) { total++; if(userBoard[r][c]) filled++; }
+  }
+  return Math.round((filled/Math.max(1,total))*100);
+}
+
+io.on('connection', (socket)=>{
+  socket.on('join', ({roomCode, name})=>{
+    if(!roomCode) return;
+    let room = rooms.get(roomCode);
+    if(!room) room = newRoom(roomCode, {});
+    socket.join(roomCode);
+    socket.data.roomCode = roomCode;
+    socket.data.name = name || 'Player';
+    room.players.set(socket.id, { name: socket.data.name, progress: 0, mistakes: 0 });
+    io.to(roomCode).emit('players', Array.from(room.players, ([id, p])=>({id, ...p})));
+    socket.emit('state', { puzzle: room.puzzle, solved: undefined, mistakeLimit: room.mistakeLimit, startedAt: room.startedAt });
+  });
+
+  socket.on('move', ({r,c,n})=>{
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    if(!room) return;
+    const correct = n === room.solved[r][c];
+    if(correct){
+      // mark into puzzle for broadcasting (lock in)
+      if(room.puzzle[r][c] === 0){
+        room.puzzle[r][c] = n;
+        // first blood
+        if(!room.firstBlood){
+          room.firstBlood = socket.id;
+          io.to(code).emit('announce', { text: 'FIRST BLOOD!', who: socket.data.name, type:'first' });
+        }
+        io.to(code).emit('cell', { r, c, n, correct:true, who: socket.data.name });
+      }
+    }else{
+      const p = room.players.get(socket.id);
+      if(p){
+        p.mistakes++;
+        io.to(code).emit('players', Array.from(room.players, ([id, pp])=>({id, ...pp})));
+        socket.emit('cell', { r, c, n, correct:false });
+        socket.emit('announce', { text: 'Wrong!', type:'wrong' });
+        if(p.mistakes >= room.mistakeLimit){
+          socket.emit('announce', { text: `Game over — mistakes ${p.mistakes}/${room.mistakeLimit}`, type:'over' });
+        }
+      }
+    }
+    // recompute progress
+    const p = room.players.get(socket.id);
+    if(p){
+      // build userBoard from room.puzzle (not per user for demo). For true per-user, store per-user boards.
+      const userBoard = room.puzzle; 
+      p.progress = computeProgress(room.puzzle, userBoard);
+      io.to(code).emit('players', Array.from(room.players, ([id, pp])=>({id, ...pp})));
+      // playful nudge: if someone < 20% while leader > 60%
+      const levels = Array.from(room.players.values()).map(pp=>pp.progress);
+      const max = Math.max(...levels), min = Math.min(...levels);
+      if(p.progress === min && max >= 60){
+        io.to(code).emit('announce', { text: `${p.name}, too slow!`, type:'slowpoke' });
+      }
+    }
+  });
+
+  socket.on('disconnect', ()=>{
+    const code = socket.data.roomCode;
+    if(!code) return;
+    const room = rooms.get(code);
+    if(!room) return;
+    room.players.delete(socket.id);
+    if(room.players.size===0){
+      rooms.delete(code);
+    } else {
+      io.to(code).emit('players', Array.from(room.players, ([id, p])=>({id, ...p})));
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, ()=> console.log('Server listening on '+PORT));

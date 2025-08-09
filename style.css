@@ -1,0 +1,20 @@
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f7f8fb;color:#0f172a}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08);padding:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{border:none;border-radius:10px;padding:10px 12px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}
+input{padding:10px;border-radius:10px;border:1px solid #e5e7eb}
+.badge{padding:6px 10px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-weight:700}
+.players{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.p{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:6px 10px}
+.grid{display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);width:min(92vw,520px);aspect-ratio:1/1;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin:12px 0}
+.cell{display:flex;align-items:center;justify-content:center;border:1px solid #e5e7eb;user-select:none;position:relative}
+.cell.prefill{background:#f3f4f6;font-weight:700}
+.cell.error{background:#ffe4e6}
+.cell.flash{animation: flashGreen .6s ease}
+@keyframes flashGreen { 0%{background:#ecfdf5} 100%{background:transparent} }
+.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(92vw,520px)}
+.key{background:#fff;border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.08);padding:14px;font-size:18px;font-weight:700;text-align:center;cursor:pointer;user-select:none}
+.key-wide{grid-column: span 3; padding:16px; font-size:18px;}
+.key.active{background:#e0f2fe; outline:2px solid #38bdf8;}
+.announce{min-height:28px;margin:8px 0;color:#475569;transition:opacity .2s}
