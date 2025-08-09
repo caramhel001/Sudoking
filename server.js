@@ -7,9 +7,9 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('public'));
-app.use(express.static('.'));
+app.use(express.static('.')); // also serve root if needed
 
-// ---- Simple in-memory rooms (for demo; use a DB for production) ----
+// ---- Simple in-memory rooms (demo) ----
 const rooms = new Map();
 
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
@@ -32,15 +32,6 @@ function generateSolved(){
   const row=shuffle([1,2,3,4,5,6,7,8,9]);
   b[0]=row.slice(); solve(b); return b;
 }
-function makePuzzle(solved, holes=50){
-  const p=deepCopy(solved); let attempts=holes, guard=0;
-  while(attempts>0 && guard<6000){
-    guard++; const r=Math.floor(Math.random()*9), c=Math.floor(Math.random()*9);
-    if(p[r][c]===0) continue; const bak=p[r][c]; p[r][c]=0;
-    const copy=deepCopy(p); if(!ensureUnique(copy)){ p[r][c]=bak; } else attempts--;
-  }
-  return p;
-}
 function ensureUnique(board){
   let count=0;
   (function backtrack(){
@@ -51,7 +42,15 @@ function ensureUnique(board){
   })();
   return count===1;
 }
-
+function makePuzzle(solved, holes=50){
+  const p=deepCopy(solved); let attempts=holes, guard=0;
+  while(attempts>0 && guard<6000){
+    guard++; const r=Math.floor(Math.random()*9), c=Math.floor(Math.random()*9);
+    if(p[r][c]===0) continue; const bak=p[r][c]; p[r][c]=0;
+    const copy=deepCopy(p); if(!ensureUnique(copy)){ p[r][c]=bak; } else attempts--;
+  }
+  return p;
+}
 function newRoom(code, opts={}){
   const solved = generateSolved();
   const puzzle = makePuzzle(solved, opts.holes ?? 50);
@@ -63,12 +62,12 @@ function newRoom(code, opts={}){
     players: new Map(), // id -> {name, progress, mistakes}
     firstBlood: null,
     startedAt: Date.now(),
-    mistakeLimit: opts.mistakeLimit ?? 5
+    mistakeLimit: opts.mistakeLimit ?? 5,
+    password: opts.password || null
   };
   rooms.set(code, room);
   return room;
 }
-
 function computeProgress(puzzle, userBoard){
   let filled=0, total=0;
   for(let r=0;r<9;r++) for(let c=0;c<9;c++){
@@ -78,16 +77,40 @@ function computeProgress(puzzle, userBoard){
 }
 
 io.on('connection', (socket)=>{
-  socket.on('join', ({roomCode, name})=>{
+  // Lobby: get room list
+  socket.on('listRooms', ()=>{
+    const list = Array.from(rooms.values()).map(r=>({
+      code: r.code,
+      players: r.players.size,
+      protected: !!r.password
+    }));
+    socket.emit('rooms', list);
+  });
+
+  // Lobby: create room (with optional password)
+  socket.on('createRoom', ({ roomCode, password })=>{
+    if(!roomCode) return;
+    if(rooms.has(roomCode)) { socket.emit('errorMsg', 'Room already exists'); return; }
+    newRoom(roomCode, { password: password || null });
+    socket.emit('created', { roomCode });
+    io.emit('roomsUpdate'); // notify others to refresh list
+  });
+
+  // Join room (with optional password check)
+  socket.on('join', ({roomCode, name, password})=>{
     if(!roomCode) return;
     let room = rooms.get(roomCode);
-    if(!room) room = newRoom(roomCode, {});
+    if(!room){ socket.emit('errorMsg', 'Room not found'); return; }
+    if(room.password && room.password !== (password||'')){
+      socket.emit('errorMsg', 'Wrong password');
+      return;
+    }
     socket.join(roomCode);
     socket.data.roomCode = roomCode;
     socket.data.name = name || 'Player';
     room.players.set(socket.id, { name: socket.data.name, progress: 0, mistakes: 0 });
     io.to(roomCode).emit('players', Array.from(room.players, ([id, p])=>({id, ...p})));
-    socket.emit('state', { puzzle: room.puzzle, solved: undefined, mistakeLimit: room.mistakeLimit, startedAt: room.startedAt });
+    socket.emit('state', { puzzle: room.puzzle, mistakeLimit: room.mistakeLimit, startedAt: room.startedAt, roomCode });
   });
 
   socket.on('move', ({r,c,n})=>{
@@ -96,13 +119,11 @@ io.on('connection', (socket)=>{
     if(!room) return;
     const correct = n === room.solved[r][c];
     if(correct){
-      // mark into puzzle for broadcasting (lock in)
       if(room.puzzle[r][c] === 0){
         room.puzzle[r][c] = n;
-        // first blood
         if(!room.firstBlood){
           room.firstBlood = socket.id;
-          io.to(code).emit('announce', { text: 'FIRST BLOOD!', who: socket.data.name, type:'first' });
+          io.to(code).emit('announce', { text: `${socket.data.name} drew FIRST BLOOD! 👑`, type:'first' });
         }
         io.to(code).emit('cell', { r, c, n, correct:true, who: socket.data.name });
       }
@@ -118,18 +139,15 @@ io.on('connection', (socket)=>{
         }
       }
     }
-    // recompute progress
     const p = room.players.get(socket.id);
     if(p){
-      // build userBoard from room.puzzle (not per user for demo). For true per-user, store per-user boards.
-      const userBoard = room.puzzle; 
+      const userBoard = room.puzzle;
       p.progress = computeProgress(room.puzzle, userBoard);
       io.to(code).emit('players', Array.from(room.players, ([id, pp])=>({id, ...pp})));
-      // playful nudge: if someone < 20% while leader > 60%
       const levels = Array.from(room.players.values()).map(pp=>pp.progress);
       const max = Math.max(...levels), min = Math.min(...levels);
       if(p.progress === min && max >= 60){
-        io.to(code).emit('announce', { text: `${p.name}, too slow!`, type:'slowpoke' });
+        io.to(code).emit('announce', { text: `${p.name}, too slow! 🐢`, type:'slowpoke' });
       }
     }
   });
@@ -145,6 +163,7 @@ io.on('connection', (socket)=>{
     } else {
       io.to(code).emit('players', Array.from(room.players, ([id, p])=>({id, ...p})));
     }
+    io.emit('roomsUpdate');
   });
 });
 
