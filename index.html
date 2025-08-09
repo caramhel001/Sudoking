@@ -56,8 +56,10 @@
   <section class="card hidden" id="pregame">
     <div class="row space-between">
       <div class="muted">Room: <span id="pgRoom"></span></div>
-      <div class="muted">Mistakes: <span id="pgLimit"></span></div>
+      <div class="muted">Mistakes: <span id="pgLimit"></span> — Difficulty: <span id="pgDiff"></span></div>
     </div>
+    <div class="muted" id="pgCount"></div>
+
     <div id="pgPlayers" class="players"></div>
     <div id="hostControls" class="row hidden">
       <button id="startBtn" class="btn">Start game</button>
@@ -72,7 +74,7 @@
       <div class="badge">⏱ <span id="timer">00:00</span></div>
     </div>
     <div class="players" id="players"></div>
-    <div id="leader" class="leader"></div>
+    <div class="leaderwrap"><div id="leader" class="leader"></div></div>
 
     <div class="board"><div class="grid" id="grid"></div></div>
 
@@ -82,6 +84,8 @@
     <div class="announce" id="announce"></div>
   </section>
 </div>
+
+<div class="overlay" id="overlay"><div class="banner">GAME OVER</div></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="client.js"></script>

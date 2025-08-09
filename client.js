@@ -22,40 +22,41 @@ const joinCancel = $("joinCancel");
 const pregame = $("pregame");
 const pgRoom = $("pgRoom");
 const pgLimit = $("pgLimit");
+const pgDiff = $("pgDiff");
+const pgCount = $("pgCount");
 const pgPlayers = $("pgPlayers");
 const hostControls = $("hostControls");
-let pregameState = {roomCode:null,count:0,players:[],isHost:false};
 const startBtn = $("startBtn");
 const waitNote = $("waitNote");
 
 // Game
 const game = $("game");
-let gameOver=false;
 const gridEl = $("grid");
 const padEl = $("pad");
 const playersEl = $("players");
 const announceEl = $("announce");
 const timerEl = $("timer"); const limitEl = $("limit");
 const notesBtn = $("notesBtn");
+const overlay = $("overlay");
 
 let selected=null, puzzle=null, startedAt=Date.now(), mistakeLimit=5, notesMode=false, currentRoom=null, isHost=false;
-// notes[r][c] is Set of numbers
 let notes = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
+let gameOver=false;
 
 function show(el, yes){ el.classList.toggle("hidden", !yes); }
 
-// Lobby behavior
-btnCreate.onclick = ()=>{ show(createBox, true); show(joinBox, false); };
-btnJoin.onclick   = ()=>{ show(joinBox, true); show(createBox, false); socket.emit("listRooms"); };
-createCancel.onclick = ()=> show(createBox, false);
-joinCancel.onclick = ()=> show(joinBox, false);
+// Robust bindings
+btnCreate.onclick = ()=>{ show(createBox,true); show(joinBox,false); };
+btnJoin.onclick   = ()=>{ show(joinBox,true); show(createBox,false); socket.emit("listRooms"); };
+createCancel.onclick = ()=> show(createBox,false);
+joinCancel.onclick = ()=> show(joinBox,false);
 refreshRooms.onclick = ()=> socket.emit("listRooms");
 
 createGo.onclick = ()=>{
   const code = (createRoomEl.value||"").trim().toUpperCase();
   const pass = (createPassEl.value||"").trim();
   const mlim = Number(createLimitEl.value||5);
-  const diff = (createDiffEl.value||'moderate');
+  const diff = (createDiffEl.value||"moderate");
   if(!code){ alert("Enter a room name"); return; }
   socket.emit("createRoom", { roomCode: code, password: pass, mistakeLimit: mlim, difficulty: diff });
 };
@@ -90,23 +91,42 @@ socket.on("rooms", (list)=>{
 socket.on("roomsUpdate", ()=> socket.emit("listRooms"));
 socket.on("errorMsg", (m)=> alert(m));
 
-// Pre-game lobby state
+// Pre-game lobby
 socket.on("pregame", (data)=>{
   currentRoom = data.roomCode;
   isHost = !!data.isHost;
   pgRoom.textContent = data.roomCode;
   pgLimit.textContent = data.mistakeLimit;
-  pgPlayers.innerHTML = "";
-  (data.players||[]).forEach(p=>{
-    const d=document.createElement('div'); d.className='p'; d.textContent = p.name;
-    pgPlayers.appendChild(d);
-  });
-  show(lobby, false); show(joinBox, false); show(createBox, false);
-  show(pregame, true); show(game, false);
-  hostControls.classList.toggle("hidden", !isHost);
-  waitNote.style.display = isHost ? "none" : "block";
+  pgDiff.textContent = (data.difficulty||'moderate').toUpperCase();
+  pgCount.textContent = `${data.count||0}/10 players`;
+  renderPregame({ roomCode: data.roomCode, count: data.count||data.players.length, players: data.players||[], isHost, mistakeLimit: data.mistakeLimit });
+  show(lobby,false); show(joinBox,false); show(createBox,false);
+  show(pregame,true); show(game,false);
   notes = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
 });
+
+function renderPregame(state){
+  pgPlayers.innerHTML='';
+  for(let i=0;i<10;i++){
+    const p = state.players[i];
+    const row = document.createElement('div'); row.className='p'; row.style.display='flex'; row.style.alignItems='center'; row.style.gap='8px';
+    const label = document.createElement('div'); label.textContent = `${i+1}. ` + (p ? p.name : '(empty)');
+    row.appendChild(label);
+    if(p){
+      if(p.id === socket.id){
+        const rb=document.createElement('button'); rb.className='btn outline'; rb.textContent = p.ready? 'Ready ✓':'Ready?'; rb.onclick=()=> socket.emit('setReady',{roomCode: currentRoom, ready: !p.ready}); row.appendChild(rb);
+      } else if(isHost){
+        const tag=document.createElement('span'); tag.className='muted'; tag.textContent = p.ready? '✓ ready' : '… not ready'; row.appendChild(tag);
+        const kick=document.createElement('button'); kick.className='btn ghost'; kick.textContent='Kick'; kick.onclick=()=> socket.emit('kick',{roomCode: currentRoom, targetId: p.id}); row.appendChild(kick);
+      } else {
+        const tag=document.createElement('span'); tag.className='muted'; tag.textContent = p.ready? '✓ ready' : '… not ready'; row.appendChild(tag);
+      }
+    }
+    pgPlayers.appendChild(row);
+  }
+  hostControls.classList.toggle('hidden', !isHost);
+  waitNote.style.display = isHost ? 'none' : 'block';
+}
 
 startBtn.onclick = ()=>{
   if(!currentRoom) return;
@@ -121,21 +141,20 @@ socket.on('notReady', ({names})=>{
 
 socket.on('forceLeave', ({reason})=>{
   alert(reason||'You were removed from the room');
-  // Return to initial lobby screen
   show(game,false); show(pregame,false); show(lobby,true);
 });
 
-// In-game state
+// In-game
 socket.on("state", (st)=>{
   puzzle = st.puzzle; startedAt = st.startedAt || Date.now();
   mistakeLimit = st.mistakeLimit; limitEl.textContent = mistakeLimit;
-  show(pregame, false); show(lobby, false); show(game, true);
+  gameOver=false; overlay.classList.remove('show');
+  show(pregame,false); show(lobby,false); show(game,true);
   notes = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
   buildGrid(); buildPad(); startTimer();
 });
 
 socket.on("players", (list)=>{
-  // live chips
   playersEl.innerHTML='';
   list.forEach(p=>{
     const d=document.createElement('div'); d.className='p';
@@ -143,7 +162,6 @@ socket.on("players", (list)=>{
     d.textContent = `${p.name}: ${p.progress||0}% (${p.mistakes||0}❌)${elim}`;
     playersEl.appendChild(d);
   });
-  // leaderboard
   const sorted = [...list].sort((a,b)=> (b.progress||0)-(a.progress||0) || (a.mistakes||0)-(b.mistakes||0));
   const board = sorted.map((p,i)=> `${i+1}. ${p.name} — ${p.progress||0}%${p.eliminated?' (OUT)':''}`).join('<br>');
   const leader = document.getElementById('leader');
@@ -161,7 +179,7 @@ socket.on("cell", ({r,c,n,correct})=>{
   if(!cell) return;
   if(correct){
     notes[r][c].clear();
-    puzzle[r][c] = n; // lock in
+    puzzle[r][c] = n;
     cell.classList.remove('error','selected');
     cell.classList.add('prefill');
     cell.textContent = String(n);
@@ -173,13 +191,16 @@ socket.on("cell", ({r,c,n,correct})=>{
   }
 });
 
-// Grid & Notes rendering
+socket.on('gameOver', ({reason})=>{ gameOver=true; overlay.classList.add('show'); announceEl.textContent = reason||'Game Over'; });
+
+// Grid & notes
 function buildGrid(){
-  // sync board width to keypad
-  const w = gridEl.getBoundingClientRect().width;
-  document.documentElement.style.setProperty('--board-w', Math.round(w)+'px');
   gridEl.innerHTML='';
   selected = null;
+  // sync keypad width with board
+  const w = gridEl.getBoundingClientRect().width;
+  document.documentElement.style.setProperty('--board-w', Math.round(w)+'px');
+
   for(let r=0;r<9;r++){
     for(let c=0;c<9;c++){
       const d=document.createElement('div');
@@ -190,7 +211,7 @@ function buildGrid(){
       if(v!==0){ d.textContent = String(v); d.classList.add('prefill'); }
       d.dataset.r=r; d.dataset.c=c;
       const pick = ()=>{
-        if(puzzle[r][c]!==0) return; // locked cell
+        if(puzzle[r][c]!==0) return; // locked
         const prev = gridEl.querySelector('.cell.selected');
         if(prev) prev.classList.remove('selected');
         selected=[r,c]; d.classList.add('selected');
@@ -206,7 +227,7 @@ function cellAt(r,c){ return gridEl.querySelector(`.cell[data-r="${r}"][data-c="
 function renderCell(r,c){
   const cell = cellAt(r,c);
   if(!cell) return;
-  if(puzzle[r][c]!==0) return; // already filled
+  if(puzzle[r][c]!==0) return;
   const container = document.createElement('div');
   container.className = 'notes';
   for(let n=1;n<=9;n++){
@@ -215,24 +236,21 @@ function renderCell(r,c){
     s.textContent = notes[r][c].has(n) ? n : '';
     container.appendChild(s);
   }
-  cell.innerHTML = ''; // clear
+  cell.innerHTML = ''; 
   cell.appendChild(container);
-  // reapply selection border if selected
   if(selected && selected[0]===r && selected[1]===c) cell.classList.add('selected');
 }
 
-// Keypad layout and actions
+// keypad
 function buildPad(){
   padEl.innerHTML='';
 
-  // Row 1: 1..5
   for(let n=1;n<=5;n++){
     const b=document.createElement('div');
     b.className='key'; b.textContent=n;
     b.onclick = ()=>handleInput(n);
     padEl.appendChild(b);
   }
-  // Row 2: 6..9 and ERASE
   for(let n=6;n<=9;n++){
     const b=document.createElement('div');
     b.className='key'; b.textContent=n;
@@ -260,10 +278,8 @@ function buildPad(){
 
 function handleInput(n){
   if(!selected || gameOver) return;
-  // ensure selection exists even after layout changes
-  const [r,c]=selected; const cell = cellAt(r,c); if(!cell) return;
   const [r,c]=selected;
-  if(puzzle[r][c]!==0) return; // can't edit final numbers or prefill
+  if(puzzle[r][c]!==0) return;
   if(notesMode){
     if(notes[r][c].has(n)) notes[r][c].delete(n); else notes[r][c].add(n);
     renderCell(r,c);
@@ -282,24 +298,3 @@ function startTimer(){
     timerEl.textContent = `${m}:${s}`;
   }, 250);
 }
-
-// GAME OVER overlay
-const overlay = document.createElement('div'); overlay.className='overlay'; overlay.innerHTML='<div class="banner">GAME OVER</div>'; document.body.appendChild(overlay);
-socket.on('gameOver', ({reason})=>{ gameOver=true; overlay.classList.add('show'); announceEl.textContent = reason||'Game Over'; });
-
-// --- Hotfix: robust bindings for create/join ---
-function safeBind(){
-  try{
-    const btnCreate = document.getElementById('btnCreate');
-    const btnJoin = document.getElementById('btnJoin');
-    const createBox = document.getElementById('createBox');
-    const joinBox = document.getElementById('joinBox');
-    if(btnCreate){
-      btnCreate.onclick = ()=>{ createBox?.classList.remove('hidden'); joinBox?.classList.add('hidden'); };
-    }
-    if(btnJoin){
-      btnJoin.onclick = ()=>{ joinBox?.classList.remove('hidden'); createBox?.classList.add('hidden'); socket.emit('listRooms'); };
-    }
-  }catch(e){ console.error('bind error', e); }
-}
-if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', safeBind); } else { safeBind(); }
