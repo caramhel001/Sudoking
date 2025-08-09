@@ -12,6 +12,8 @@ input, select{padding:12px;border-radius:10px;border:1px solid var(--line);min-w
 .btn.outline{background:#fff;color:var(--accent);border:1px solid var(--accent)}
 .btn.primary{background:var(--accent);color:#fff}
 .btn.ghost{background:#fff;color:var(--muted);border:1px solid var(--line)}
+.btn.note-toggle{background:#0ea5e9}
+.btn.note-toggle.active{background:#0369a1}
 .badge{padding:6px 10px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-weight:700}
 .muted{color:var(--muted)}
 .hidden{display:none}
@@ -28,7 +30,7 @@ input, select{padding:12px;border-radius:10px;border:1px solid var(--line);min-w
 .cell{display:flex;align-items:center;justify-content:center;border:1px solid var(--line);user-select:none;position:relative;font-weight:700}
 .cell.prefill{background:#f3f4f6}
 .cell.error{background:#ffe4e6}
-.cell.flash{animation: flashGreen .6s ease}
+.cell.flash{animation: flashGreen .5s ease}
 .cell.selected{ background:#eef2ff; outline:2px solid var(--accent); outline-offset:-2px; }
 @keyframes flashGreen { 0%{background:#ecfdf5} 100%{background:transparent} }
 
@@ -36,11 +38,15 @@ input, select{padding:12px;border-radius:10px;border:1px solid var(--line);min-w
 .cell.thick-r{border-right:2px solid var(--thick)}
 .cell.thick-b{border-bottom:2px solid var(--thick)}
 
-.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(92vw,520px);margin:8px auto 0;position:sticky;bottom:0;padding-bottom:env(safe-area-inset-bottom)}
+/* Pencil notes (stacked 1..9 in a tiny grid) */
+.cell .notes{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:1px;font-weight:600}
+.cell .note{font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;color:#64748b}
+
+.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(92vw,520px);margin:8px auto 0}
+/* new keypad rows 1-5 / 6-9 ERASE */
 .key{background:#fff;border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.08);padding:14px;font-size:18px;font-weight:700;text-align:center;cursor:pointer;user-select:none}
-.key-wide{grid-column:span 3; padding:16px; font-size:18px}
-.key-erase{grid-column:span 2}
-.key.active{background:#e0f2fe; outline:2px solid #38bdf8;}
+.key-erase{grid-column:5/6}
+.pad-note{display:flex;justify-content:center;margin:8px 0}
 .announce{min-height:28px;margin:8px 0;color:#475569;transition:opacity .2s}
 
 @media (max-width: 480px){

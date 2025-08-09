@@ -33,8 +33,11 @@ const padEl = $("pad");
 const playersEl = $("players");
 const announceEl = $("announce");
 const timerEl = $("timer"); const limitEl = $("limit");
+const notesBtn = $("notesBtn");
 
 let selected=null, puzzle=null, startedAt=Date.now(), mistakeLimit=5, notesMode=false, currentRoom=null, isHost=false;
+// notes[r][c] is Set of numbers
+let notes = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
 
 function show(el, yes){ el.classList.toggle("hidden", !yes); }
 
@@ -98,6 +101,7 @@ socket.on("pregame", (data)=>{
   show(pregame, true); show(game, false);
   hostControls.classList.toggle("hidden", !isHost);
   waitNote.style.display = isHost ? "none" : "block";
+  notes = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
 });
 
 startBtn.onclick = ()=>{
@@ -110,6 +114,7 @@ socket.on("state", (st)=>{
   puzzle = st.puzzle; startedAt = st.startedAt || Date.now();
   mistakeLimit = st.mistakeLimit; limitEl.textContent = mistakeLimit;
   show(pregame, false); show(lobby, false); show(game, true);
+  notes = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
   buildGrid(); buildPad(); startTimer();
 });
 
@@ -132,16 +137,19 @@ socket.on("cell", ({r,c,n,correct})=>{
   const cell = cellAt(r,c);
   if(!cell) return;
   if(correct){
+    // Clear notes and place final number; flash then back to normal styling
+    notes[r][c].clear();
+    renderCell(r,c);
     cell.textContent = String(n);
     cell.classList.add('flash');
-    setTimeout(()=> cell.classList.remove('flash'), 600);
+    setTimeout(()=> cell.classList.remove('flash'), 500);
   } else {
     cell.classList.add('error');
-    setTimeout(()=> cell.classList.remove('error'), 400);
+    setTimeout(()=> cell.classList.remove('error'), 350);
   }
 });
 
-// Grid & Pad
+// Grid & Notes rendering
 function buildGrid(){
   gridEl.innerHTML='';
   selected = null;
@@ -161,28 +169,77 @@ function buildGrid(){
       };
       d.onclick = pick; d.ontouchstart = pick;
       gridEl.appendChild(d);
+      if(v===0) renderCell(r,c);
     }
   }
 }
 function cellAt(r,c){ return gridEl.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); }
 
+function renderCell(r,c){
+  const cell = cellAt(r,c);
+  if(!cell) return;
+  if(puzzle[r][c]!==0) return; // already filled
+  const container = document.createElement('div');
+  container.className = 'notes';
+  for(let n=1;n<=9;n++){
+    const s = document.createElement('div');
+    s.className = 'note';
+    s.textContent = notes[r][c].has(n) ? n : '';
+    container.appendChild(s);
+  }
+  cell.innerHTML = ''; // clear
+  cell.appendChild(container);
+  // reapply selection border if selected
+  if(selected && selected[0]===r && selected[1]===c) cell.classList.add('selected');
+}
+
+// Keypad layout and actions
 function buildPad(){
   padEl.innerHTML='';
-  for(let n=1;n<=9;n++){
+
+  // Row 1: 1..5
+  for(let n=1;n<=5;n++){
     const b=document.createElement('div');
     b.className='key'; b.textContent=n;
-    b.onclick = ()=>{ if(!selected) return; socket.emit('move', { r:selected[0], c:selected[1], n }); };
+    b.onclick = ()=>handleInput(n);
+    padEl.appendChild(b);
+  }
+  // Row 2: 6..9 and ERASE
+  for(let n=6;n<=9;n++){
+    const b=document.createElement('div');
+    b.className='key'; b.textContent=n;
+    b.onclick = ()=>handleInput(n);
     padEl.appendChild(b);
   }
   const erase=document.createElement('div');
   erase.className='key key-erase'; erase.textContent='Erase';
-  erase.onclick = ()=>{ const prev = gridEl.querySelector('.cell.selected'); if(prev) prev.classList.remove('selected'); selected=null; };
+  erase.onclick = ()=>{
+    if(!selected) return;
+    const [r,c]=selected;
+    if(puzzle[r][c]===0){
+      notes[r][c].clear();
+      renderCell(r,c);
+    }
+  };
   padEl.appendChild(erase);
 
-  const notes=document.createElement('div');
-  notes.className='key key-wide'; notes.textContent='Notes: OFF';
-  notes.onclick = ()=>{ notesMode=!notesMode; notes.classList.toggle('active', notesMode); notes.textContent = notesMode?'Notes: ON':'Notes: OFF'; };
-  padEl.appendChild(notes);
+  notesBtn.onclick = ()=>{
+    notesMode=!notesMode;
+    notesBtn.classList.toggle('active', notesMode);
+    notesBtn.textContent = notesMode ? 'Notes: ON' : 'Notes: OFF';
+  };
+}
+
+function handleInput(n){
+  if(!selected) return;
+  const [r,c]=selected;
+  if(puzzle[r][c]!==0) return; // can't edit final numbers or prefill
+  if(notesMode){
+    if(notes[r][c].has(n)) notes[r][c].delete(n); else notes[r][c].add(n);
+    renderCell(r,c);
+  }else{
+    socket.emit('move', { r, c, n });
+  }
 }
 
 let timerId=null;
