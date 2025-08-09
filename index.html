@@ -69,18 +69,22 @@
 
   <!-- Game -->
   <section class="card hidden" id="game">
-    <div class="row">
-      <div class="badge">Mistake limit: <span id="limit">5</span></div>
-      <div class="badge">⏱ <span id="timer">00:00</span></div>
+    <div class="row space-between">
+      <div style="display:flex; gap:8px; align-items:center;">
+        <div class="badge">Mistake limit: <span id="limit">5</span></div>
+        <div class="badge">⏱ <span id="timer">00:00</span></div>
+        <div class="badge" id="youBadge">You: 0% (0❌)</div>
+      </div>
+      <button id="leaveBtn" class="btn outline">Leave</button>
     </div>
     <div class="players" id="players"></div>
-    <div class="leaderwrap"><div id="leader" class="leader"></div></div>
 
     <div class="board"><div class="grid" id="grid"></div></div>
 
     <div class="pad-wrap"><div class="pad" id="pad"></div></div>
     <div class="pad-note"><button id="notesBtn" class="btn note-toggle">Notes: OFF</button></div>
 
+    <div class="leaderwrap"><div id="leader" class="leader"></div></div>
     <div class="announce" id="announce"></div>
   </section>
 </div>

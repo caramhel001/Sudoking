@@ -221,6 +221,30 @@ io.on('connection', (socket)=>{
     }
   });
 
+  socket.on('leaveRoom', ()=>{
+    const code = socket.data.roomCode;
+    if(!code) return;
+    const room = rooms.get(code);
+    if(!room) return;
+    room.players.delete(socket.id);
+    socket.leave(code);
+    socket.data.roomCode = null;
+    if(room.players.size===0){ rooms.delete(code); io.emit('roomsUpdate'); return; }
+    if(!room.started){
+      io.to(code).emit('pregame', {
+        roomCode: code,
+        count: room.players.size,
+        players: Array.from(room.players, ([id,pp])=>({ id, name:pp.name, ready:pp.ready })),
+        isHost: socket.id===room.creatorId,
+        mistakeLimit: room.mistakeLimit,
+        difficulty: room.difficulty
+      });
+      io.emit('roomsUpdate');
+    }else{
+      io.to(code).emit('players', Array.from(room.players, ([id,pp])=>({ id, ...pp })));
+    }
+  });
+
   socket.on('disconnect', ()=>{
     const code = socket.data.roomCode;
     if(!code) return;

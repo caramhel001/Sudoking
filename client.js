@@ -35,6 +35,8 @@ const gridEl = $("grid");
 const padEl = $("pad");
 const playersEl = $("players");
 const announceEl = $("announce");
+const leaveBtn = $("leaveBtn");
+const youBadge = $("youBadge");
 const timerEl = $("timer"); const limitEl = $("limit");
 const notesBtn = $("notesBtn");
 const overlay = $("overlay");
@@ -155,6 +157,10 @@ socket.on("state", (st)=>{
 });
 
 socket.on("players", (list)=>{
+  // update "You" badge
+  const me = list.find(p=>p.id===socket.id);
+  if(me){ youBadge.textContent = `You: ${me.progress||0}% (${me.mistakes||0}❌)`; }
+
   playersEl.innerHTML='';
   list.forEach(p=>{
     const d=document.createElement('div'); d.className='p';
@@ -277,6 +283,13 @@ function buildPad(){
 }
 
 function handleInput(n){
+  // Extra guard to ensure a selection and not locked
+  if(!selected || gameOver) return;
+  const [r,c]=selected;
+  const cell = cellAt(r,c);
+  if(!cell) return;
+  if(puzzle[r][c]!==0) return;
+
   if(!selected || gameOver) return;
   const [r,c]=selected;
   if(puzzle[r][c]!==0) return;
@@ -298,3 +311,10 @@ function startTimer(){
     timerEl.textContent = `${m}:${s}`;
   }, 250);
 }
+
+leaveBtn.onclick = ()=>{
+  if(confirm('Leave this game?')){
+    socket.emit('leaveRoom');
+    location.reload();
+  }
+};
