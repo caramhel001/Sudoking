@@ -286,3 +286,20 @@ function startTimer(){
 // GAME OVER overlay
 const overlay = document.createElement('div'); overlay.className='overlay'; overlay.innerHTML='<div class="banner">GAME OVER</div>'; document.body.appendChild(overlay);
 socket.on('gameOver', ({reason})=>{ gameOver=true; overlay.classList.add('show'); announceEl.textContent = reason||'Game Over'; });
+
+// --- Hotfix: robust bindings for create/join ---
+function safeBind(){
+  try{
+    const btnCreate = document.getElementById('btnCreate');
+    const btnJoin = document.getElementById('btnJoin');
+    const createBox = document.getElementById('createBox');
+    const joinBox = document.getElementById('joinBox');
+    if(btnCreate){
+      btnCreate.onclick = ()=>{ createBox?.classList.remove('hidden'); joinBox?.classList.add('hidden'); };
+    }
+    if(btnJoin){
+      btnJoin.onclick = ()=>{ joinBox?.classList.remove('hidden'); createBox?.classList.add('hidden'); socket.emit('listRooms'); };
+    }
+  }catch(e){ console.error('bind error', e); }
+}
+if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', safeBind); } else { safeBind(); }
