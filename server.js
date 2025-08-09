@@ -41,6 +41,16 @@ function ensureUnique(board){
   })();
   return count===1;
 }
+
+function holesForDifficulty(level){
+  switch((level||'').toLowerCase()){
+    case 'easy': return 40;       // fewer blanks
+    case 'moderate': return 50;
+    case 'hard': return 58;
+    case 'extreme': return 64;    // many blanks
+    default: return 50;
+  }
+}
 function makePuzzle(solved, holes=50){
   const p=deepCopy(solved); let attempts=holes, guard=0;
   while(attempts>0 && guard<6000){
@@ -62,7 +72,7 @@ function newRoom(code, opts={}){
     createdAt: Date.now(),
     solved,
     puzzle,
-    players: new Map(),     // id -> {name, progress, mistakes}
+    players: new Map(),     // id -> {name, progress, mistakes, ready}
     started:false,
     creatorId:null,
     allowedIds:new Set(),
@@ -90,11 +100,12 @@ io.on('connection', (socket)=>{
     socket.emit('rooms', list);
   });
 
-  socket.on('createRoom', ({roomCode, password, mistakeLimit})=>{
+  socket.on('createRoom', ({roomCode, password, mistakeLimit, difficulty})=>{
     if(!roomCode) return;
     if(rooms.has(roomCode)){ socket.emit('errorMsg','Room already exists'); return; }
     const ml = [3,5,10].includes(Number(mistakeLimit)) ? Number(mistakeLimit) : 5;
-    const room = newRoom(roomCode, {password: password||null, mistakeLimit: ml});
+    const holes = holesForDifficulty(difficulty);
+    const room = newRoom(roomCode, {password: password||null, mistakeLimit: ml, holes});
     room.creatorId = socket.id;
     socket.emit('created', {roomCode});
     io.emit('roomsUpdate');
@@ -114,21 +125,26 @@ io.on('connection', (socket)=>{
     socket.join(roomCode);
     socket.data.roomCode = roomCode;
     socket.data.name = (name||'Player').trim() || 'Player';
-    room.players.set(socket.id, {name:socket.data.name, progress:0, mistakes:0});
+    if(room.players.size>=10 && !room.started){ socket.emit('errorMsg','Room is full (10 players)'); return; }
+    room.players.set(socket.id, {name:socket.data.name, progress:0, mistakes:0, ready:false});
     if(!room.started){
-      io.to(roomCode).emit('pregame', {
-        roomCode,
-        players: [...room.players.values()].map(p=>({name:p.name})),
-        isHost: socket.id===room.creatorId,
-        mistakeLimit: room.mistakeLimit
-      });
+      io.to(roomCode).emit('pregame', { roomCode, count: room.players.size, players: Array.from(room.players, ([id,p])=>({id,name:p.name,ready:!!p.ready})), isHost: socket.id===room.creatorId, mistakeLimit: room.mistakeLimit });
     }else{
       socket.emit('state', { puzzle: room.puzzle, mistakeLimit: room.mistakeLimit, startedAt: room.startedAt, roomCode });
       io.to(roomCode).emit('players', Array.from(room.players, ([id,p])=>({id,...p})));
     }
   });
 
-  socket.on('setOptions', ({roomCode, mistakeLimit})=>{
+  
+  socket.on('setReady', ({roomCode, ready})=>{
+    const room = rooms.get(roomCode);
+    if(!room || room.started) return;
+    const p = room.players.get(socket.id);
+    if(!p) return;
+    p.ready = !!ready;
+    io.to(roomCode).emit('pregame', { roomCode, count: room.players.size, players: Array.from(room.players, ([id,pp])=>({id,name:pp.name,ready:!!pp.ready})), isHost: socket.id===room.creatorId, mistakeLimit: room.mistakeLimit });
+  });
+socket.on('setOptions', ({roomCode, mistakeLimit})=>{
     const room = rooms.get(roomCode);
     if(!room || socket.id !== room.creatorId || room.started) return;
     if([3,5,10].includes(Number(mistakeLimit))) room.mistakeLimit = Number(mistakeLimit);
@@ -154,6 +170,7 @@ io.on('connection', (socket)=>{
   socket.on('move', ({r,c,n})=>{
     const code = socket.data.roomCode; if(!code) return;
     const room = rooms.get(code); if(!room || !room.started) return;
+    const pcur = room.players.get(socket.id); if(!pcur || (pcur.eliminated===true)) return; // ignore eliminated
     const correct = n === room.solved[r][c];
     if(correct){
       if(room.puzzle[r][c]===0){
@@ -164,11 +181,13 @@ io.on('connection', (socket)=>{
       const p=room.players.get(socket.id);
       if(p){
         p.mistakes++;
-        io.to(code).emit('players', Array.from(room.players, ([id,pp])=>({id,...pp})));
-        socket.emit('cell', {r,c,n,correct:false});
         if(p.mistakes >= room.mistakeLimit){
-          socket.emit('announce', {text:`Game over — mistakes ${p.mistakes}/${room.mistakeLimit}`, type:'over'});
+          p.eliminated = true;
+          try{ socket.emit('gameOver', {reason:'Mistake limit reached'}); }catch(e){}
+        } else {
+          socket.emit('cell', {r,c,n,correct:false});
         }
+        io.to(code).emit('players', Array.from(room.players, ([id,pp])=>({id,...pp})));
       }
     }
     const p=room.players.get(socket.id);
@@ -179,7 +198,20 @@ io.on('connection', (socket)=>{
     }
   });
 
-  socket.on('disconnect', ()=>{
+  
+  socket.on('kick', ({roomCode, targetId})=>{
+    const room = rooms.get(roomCode);
+    if(!room || socket.id !== room.creatorId || room.started) return;
+    if(!room.players.has(targetId)) return;
+    room.players.delete(targetId);
+    try{
+      const s = io.sockets.sockets.get(targetId);
+      if(s){ s.leave(roomCode); s.emit('forceLeave', {reason:'Kicked by host'}); }
+    }catch(e){}
+    io.to(roomCode).emit('pregame', { roomCode, count: room.players.size, players: Array.from(room.players, ([id,pp])=>({id,name:pp.name,ready:!!pp.ready})), isHost: socket.id===room.creatorId, mistakeLimit: room.mistakeLimit });
+    io.emit('roomsUpdate');
+  });
+socket.on('disconnect', ()=>{
     const code = socket.data.roomCode;
     if(!code) return;
     const room = rooms.get(code);
@@ -189,12 +221,7 @@ io.on('connection', (socket)=>{
       rooms.delete(code);
     }else{
       if(!room.started){
-        io.to(code).emit('pregame', {
-          roomCode:code,
-          players: [...room.players.values()].map(p=>({name:p.name})),
-          isHost: socket.id===room.creatorId,
-          mistakeLimit: room.mistakeLimit
-        });
+        io.to(code).emit('pregame', { roomCode:code, count: room.players.size, players: Array.from(room.players, ([id,p])=>({id,name:p.name,ready:!!p.ready})), isHost: socket.id===room.creatorId, mistakeLimit: room.mistakeLimit });
       }else{
         io.to(code).emit('players', Array.from(room.players, ([id,p])=>({id,...p})));
       }

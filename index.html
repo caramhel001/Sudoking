@@ -19,13 +19,20 @@
     </div>
 
     <div id="createBox" class="sheet hidden">
-      <div class="row"><input id="createRoom" placeholder="Room code (e.g., TEAM1)" /></div>
+      <div class="row"><input id="createRoom" placeholder="Room name (e.g., Team A)" /></div>
       <div class="row">
-        <label class="muted">Mistake limit:</label>
+        <label class="muted">Mistakes:</label>
         <select id="createLimit">
           <option value="3">3</option>
           <option value="5" selected>5</option>
           <option value="10">10</option>
+        </select>
+        <label class="muted">Difficulty:</label>
+        <select id="createDiff">
+          <option value="easy">Easy</option>
+          <option value="moderate" selected>Moderate</option>
+          <option value="hard">Hard</option>
+          <option value="extreme">EXTREME</option>
         </select>
       </div>
       <div class="row"><input id="createPass" placeholder="Password (optional)" /></div>
@@ -65,6 +72,7 @@
       <div class="badge">⏱ <span id="timer">00:00</span></div>
     </div>
     <div class="players" id="players"></div>
+    <div id="leader" class="leader"></div>
 
     <div class="board"><div class="grid" id="grid"></div></div>
 

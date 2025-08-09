@@ -42,9 +42,9 @@ input, select{padding:12px;border-radius:10px;border:1px solid var(--line);min-w
 .cell .notes{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:1px;font-weight:600}
 .cell .note{font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;color:#64748b}
 
-.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(92vw,520px);margin:8px auto 0}
+.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;width:min(92vw,520px);margin:8px auto 0}
 /* new keypad rows 1-5 / 6-9 ERASE */
-.key{background:#fff;border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.08);padding:14px;font-size:18px;font-weight:700;text-align:center;cursor:pointer;user-select:none}
+.key{background:#fff;border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.08);padding:12px 8px;min-height:48px;font-size:18px;font-weight:700;text-align:center;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:center}
 .key-erase{grid-column:5/6}
 .pad-note{display:flex;justify-content:center;margin:8px 0}
 .announce{min-height:28px;margin:8px 0;color:#475569;transition:opacity .2s}
@@ -53,5 +53,12 @@ input, select{padding:12px;border-radius:10px;border:1px solid var(--line);min-w
   h1{font-size:26px}
   input,select{min-width:200px}
   .grid{width:92vw}
-  .key{padding:12px;font-size:17px}
+  .key{background:#fff;border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.08);padding:12px 8px;min-height:48px;font-size:18px;font-weight:700;text-align:center;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:center}
 }
+
+/* Game over overlay */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}
+.overlay.show{display:flex}
+.overlay .banner{background:#111827;color:#fff;padding:28px 32px;border-radius:16px;font-size:28px;font-weight:900;box-shadow:0 12px 40px rgba(0,0,0,.4)}
+
+@media (max-width:390px){ .key{min-height:44px;font-size:16px;padding:10px 6px} }

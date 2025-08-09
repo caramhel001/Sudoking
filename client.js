@@ -10,6 +10,7 @@ const createBox = $("createBox");
 const createRoomEl = $("createRoom");
 const createPassEl = $("createPass");
 const createLimitEl = $("createLimit");
+const createDiffEl = $("createDiff");
 const createGo = $("createGo");
 const createCancel = $("createCancel");
 const joinBox = $("joinBox");
@@ -23,11 +24,13 @@ const pgRoom = $("pgRoom");
 const pgLimit = $("pgLimit");
 const pgPlayers = $("pgPlayers");
 const hostControls = $("hostControls");
+let pregameState = {roomCode:null,count:0,players:[],isHost:false};
 const startBtn = $("startBtn");
 const waitNote = $("waitNote");
 
 // Game
 const game = $("game");
+let gameOver=false;
 const gridEl = $("grid");
 const padEl = $("pad");
 const playersEl = $("players");
@@ -52,8 +55,9 @@ createGo.onclick = ()=>{
   const code = (createRoomEl.value||"").trim().toUpperCase();
   const pass = (createPassEl.value||"").trim();
   const mlim = Number(createLimitEl.value||5);
-  if(!code){ alert("Enter a room code"); return; }
-  socket.emit("createRoom", { roomCode: code, password: pass, mistakeLimit: mlim });
+  const diff = (createDiffEl.value||'moderate');
+  if(!code){ alert("Enter a room name"); return; }
+  socket.emit("createRoom", { roomCode: code, password: pass, mistakeLimit: mlim, difficulty: diff });
 };
 
 socket.on("created", ({ roomCode })=>{
@@ -109,6 +113,18 @@ startBtn.onclick = ()=>{
   socket.emit("startGame", { roomCode: currentRoom });
 };
 
+socket.on('notReady', ({names})=>{
+  announceEl.textContent = 'Waiting for: ' + names.join(', ');
+  announceEl.style.opacity='1';
+  setTimeout(()=> announceEl.style.opacity='0', 2000);
+});
+
+socket.on('forceLeave', ({reason})=>{
+  alert(reason||'You were removed from the room');
+  // Return to initial lobby screen
+  show(game,false); show(pregame,false); show(lobby,true);
+});
+
 // In-game state
 socket.on("state", (st)=>{
   puzzle = st.puzzle; startedAt = st.startedAt || Date.now();
@@ -119,12 +135,19 @@ socket.on("state", (st)=>{
 });
 
 socket.on("players", (list)=>{
+  // live chips
   playersEl.innerHTML='';
   list.forEach(p=>{
     const d=document.createElement('div'); d.className='p';
-    d.textContent = `${p.name}: ${p.progress||0}% (${p.mistakes||0}❌)`;
+    const elim = p.eliminated? ' • OUT' : '';
+    d.textContent = `${p.name}: ${p.progress||0}% (${p.mistakes||0}❌)${elim}`;
     playersEl.appendChild(d);
   });
+  // leaderboard
+  const sorted = [...list].sort((a,b)=> (b.progress||0)-(a.progress||0) || (a.mistakes||0)-(b.mistakes||0));
+  const board = sorted.map((p,i)=> `${i+1}. ${p.name} — ${p.progress||0}%${p.eliminated?' (OUT)':''}`).join('<br>');
+  const leader = document.getElementById('leader');
+  leader.innerHTML = `<div class="muted">Leaderboard</div><div class="p" style="width:100%">${board||'—'}</div>`;
 });
 
 socket.on("announce", (msg)=>{
@@ -137,12 +160,13 @@ socket.on("cell", ({r,c,n,correct})=>{
   const cell = cellAt(r,c);
   if(!cell) return;
   if(correct){
-    // Clear notes and place final number; flash then back to normal styling
     notes[r][c].clear();
-    renderCell(r,c);
+    puzzle[r][c] = n; // lock in
+    cell.classList.remove('error','selected');
+    cell.classList.add('prefill');
     cell.textContent = String(n);
     cell.classList.add('flash');
-    setTimeout(()=> cell.classList.remove('flash'), 500);
+    setTimeout(()=> cell.classList.remove('flash'), 400);
   } else {
     cell.classList.add('error');
     setTimeout(()=> cell.classList.remove('error'), 350);
@@ -163,6 +187,7 @@ function buildGrid(){
       if(v!==0){ d.textContent = String(v); d.classList.add('prefill'); }
       d.dataset.r=r; d.dataset.c=c;
       const pick = ()=>{
+        if(puzzle[r][c]!==0) return; // locked cell
         const prev = gridEl.querySelector('.cell.selected');
         if(prev) prev.classList.remove('selected');
         selected=[r,c]; d.classList.add('selected');
@@ -214,7 +239,7 @@ function buildPad(){
   const erase=document.createElement('div');
   erase.className='key key-erase'; erase.textContent='Erase';
   erase.onclick = ()=>{
-    if(!selected) return;
+    if(!selected || gameOver) return;
     const [r,c]=selected;
     if(puzzle[r][c]===0){
       notes[r][c].clear();
@@ -231,7 +256,7 @@ function buildPad(){
 }
 
 function handleInput(n){
-  if(!selected) return;
+  if(!selected || gameOver) return;
   const [r,c]=selected;
   if(puzzle[r][c]!==0) return; // can't edit final numbers or prefill
   if(notesMode){
@@ -252,3 +277,7 @@ function startTimer(){
     timerEl.textContent = `${m}:${s}`;
   }, 250);
 }
+
+// GAME OVER overlay
+const overlay = document.createElement('div'); overlay.className='overlay'; overlay.innerHTML='<div class="banner">GAME OVER</div>'; document.body.appendChild(overlay);
+socket.on('gameOver', ({reason})=>{ gameOver=true; overlay.classList.add('show'); announceEl.textContent = reason||'Game Over'; });
