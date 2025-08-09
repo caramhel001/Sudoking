@@ -20,6 +20,14 @@
 
     <div id="createBox" class="sheet hidden">
       <div class="row"><input id="createRoom" placeholder="Room code (e.g., TEAM1)" /></div>
+      <div class="row">
+        <label class="muted">Mistake limit:</label>
+        <select id="createLimit">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+        </select>
+      </div>
       <div class="row"><input id="createPass" placeholder="Password (optional)" /></div>
       <div class="row">
         <button id="createGo" class="btn primary">Create</button>
@@ -35,6 +43,19 @@
       <div id="roomList" class="roomlist"></div>
       <div class="row"><button id="joinCancel" class="btn ghost">Close</button></div>
     </div>
+  </section>
+
+  <!-- Pre-game room lobby -->
+  <section class="card hidden" id="pregame">
+    <div class="row space-between">
+      <div class="muted">Room: <span id="pgRoom"></span></div>
+      <div class="muted">Mistakes: <span id="pgLimit"></span></div>
+    </div>
+    <div id="pgPlayers" class="players"></div>
+    <div id="hostControls" class="row hidden">
+      <button id="startBtn" class="btn">Start game</button>
+    </div>
+    <div class="muted" id="waitNote">Waiting for host to start…</div>
   </section>
 
   <!-- Game -->

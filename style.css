@@ -7,7 +7,7 @@ h1{font-size:30px;margin:6px 0}
 .card{background:var(--card);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08);padding:16px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:6px 0}
 .space-between{justify-content:space-between}
-input{padding:12px;border-radius:10px;border:1px solid var(--line);min-width:240px}
+input, select{padding:12px;border-radius:10px;border:1px solid var(--line);min-width:240px}
 .btn{border:none;border-radius:10px;padding:10px 14px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}
 .btn.outline{background:#fff;color:var(--accent);border:1px solid var(--accent)}
 .btn.primary{background:var(--accent);color:#fff}
@@ -29,21 +29,23 @@ input{padding:12px;border-radius:10px;border:1px solid var(--line);min-width:240
 .cell.prefill{background:#f3f4f6}
 .cell.error{background:#ffe4e6}
 .cell.flash{animation: flashGreen .6s ease}
+.cell.selected{ background:#eef2ff; outline:2px solid var(--accent); outline-offset:-2px; }
 @keyframes flashGreen { 0%{background:#ecfdf5} 100%{background:transparent} }
 
-/* Emphasize 3x3 subgrid borders */
+/* 3x3 bold lines */
 .cell.thick-r{border-right:2px solid var(--thick)}
 .cell.thick-b{border-bottom:2px solid var(--thick)}
 
-.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(92vw,520px);margin:8px auto 0}
+.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(92vw,520px);margin:8px auto 0;position:sticky;bottom:0;padding-bottom:env(safe-area-inset-bottom)}
 .key{background:#fff;border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.08);padding:14px;font-size:18px;font-weight:700;text-align:center;cursor:pointer;user-select:none}
-.key-wide{grid-column: span 3; padding:16px; font-size:18px;}
+.key-wide{grid-column:span 3; padding:16px; font-size:18px}
+.key-erase{grid-column:span 2}
 .key.active{background:#e0f2fe; outline:2px solid #38bdf8;}
 .announce{min-height:28px;margin:8px 0;color:#475569;transition:opacity .2s}
 
 @media (max-width: 480px){
   h1{font-size:26px}
-  input{min-width:200px}
+  input,select{min-width:200px}
   .grid{width:92vw}
   .key{padding:12px;font-size:17px}
 }

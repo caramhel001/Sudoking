@@ -6,11 +6,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-app.use(express.static('public'));
-app.use(express.static('.')); // also serve root if needed
+// Serve static files from ROOT only (no public folder)
+app.use(express.static('.'));
 
-// ---- Simple in-memory rooms (demo) ----
-const rooms = new Map();
+// ---- In-memory rooms (demo) ----
+const rooms = new Map(); // code -> room
 
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
 function deepCopy(b){ return b.map(r=>r.slice()); }
@@ -29,16 +29,15 @@ function solve(b){
 }
 function generateSolved(){
   const b=Array.from({length:9},()=>Array(9).fill(0));
-  const row=shuffle([1,2,3,4,5,6,7,8,9]);
-  b[0]=row.slice(); solve(b); return b;
+  b[0]=shuffle([1,2,3,4,5,6,7,8,9]).slice(); solve(b); return b;
 }
 function ensureUnique(board){
   let count=0;
-  (function backtrack(){
+  (function bt(){
     if(count>=2) return;
     const pos=findEmpty(board); if(!pos){ count++; return; }
     const [r,c]=pos;
-    for(let n=1;n<=9;n++){ if(valid(board,r,c,n)){ board[r][c]=n; backtrack(); board[r][c]=0; if(count>=2) return; } }
+    for(let n=1;n<=9;n++){ if(valid(board,r,c,n)){ board[r][c]=n; bt(); board[r][c]=0; if(count>=2) return; } }
   })();
   return count===1;
 }
@@ -51,19 +50,25 @@ function makePuzzle(solved, holes=50){
   }
   return p;
 }
+function snapshotPlayers(room){
+  room.allowedIds = new Set([...room.players.keys()]);
+}
+
 function newRoom(code, opts={}){
-  const solved = generateSolved();
-  const puzzle = makePuzzle(solved, opts.holes ?? 50);
-  const room = {
+  const solved=generateSolved();
+  const puzzle=makePuzzle(solved, opts.holes ?? 50);
+  const room={
     code,
     createdAt: Date.now(),
     solved,
     puzzle,
-    players: new Map(), // id -> {name, progress, mistakes}
-    firstBlood: null,
-    startedAt: Date.now(),
+    players: new Map(),     // id -> {name, progress, mistakes}
+    started:false,
+    creatorId:null,
+    allowedIds:new Set(),
     mistakeLimit: opts.mistakeLimit ?? 5,
-    password: opts.password || null
+    password: opts.password || null,
+    startedAt:null
   };
   rooms.set(code, room);
   return room;
@@ -71,84 +76,106 @@ function newRoom(code, opts={}){
 function computeProgress(puzzle, userBoard){
   let filled=0, total=0;
   for(let r=0;r<9;r++) for(let c=0;c<9;c++){
-    if(puzzle[r][c]===0) { total++; if(userBoard[r][c]) filled++; }
+    if(puzzle[r][c]===0){ total++; if(userBoard[r][c]) filled++; }
   }
   return Math.round((filled/Math.max(1,total))*100);
 }
 
 io.on('connection', (socket)=>{
-  // Lobby: get room list
+
   socket.on('listRooms', ()=>{
-    const list = Array.from(rooms.values()).map(r=>({
-      code: r.code,
-      players: r.players.size,
-      protected: !!r.password
+    const list = Array.from(rooms.values()).filter(r=>!r.started).map(r=>({
+      code:r.code, players:r.players.size, protected:!!r.password
     }));
     socket.emit('rooms', list);
   });
 
-  // Lobby: create room (with optional password)
-  socket.on('createRoom', ({ roomCode, password })=>{
+  socket.on('createRoom', ({roomCode, password, mistakeLimit})=>{
     if(!roomCode) return;
-    if(rooms.has(roomCode)) { socket.emit('errorMsg', 'Room already exists'); return; }
-    newRoom(roomCode, { password: password || null });
-    socket.emit('created', { roomCode });
-    io.emit('roomsUpdate'); // notify others to refresh list
+    if(rooms.has(roomCode)){ socket.emit('errorMsg','Room already exists'); return; }
+    const ml = [3,5,10].includes(Number(mistakeLimit)) ? Number(mistakeLimit) : 5;
+    const room = newRoom(roomCode, {password: password||null, mistakeLimit: ml});
+    room.creatorId = socket.id;
+    socket.emit('created', {roomCode});
+    io.emit('roomsUpdate');
   });
 
-  // Join room (with optional password check)
   socket.on('join', ({roomCode, name, password})=>{
-    if(!roomCode) return;
-    let room = rooms.get(roomCode);
-    if(!room){ socket.emit('errorMsg', 'Room not found'); return; }
+    const room = rooms.get(roomCode);
+    if(!room){ socket.emit('errorMsg','Room not found'); return; }
+    if(room.started){
+      if(!room.allowedIds.has(socket.id)){
+        socket.emit('errorMsg','Game already started'); return;
+      }
+    }
     if(room.password && room.password !== (password||'')){
-      socket.emit('errorMsg', 'Wrong password');
-      return;
+      socket.emit('errorMsg','Wrong password'); return;
     }
     socket.join(roomCode);
     socket.data.roomCode = roomCode;
-    socket.data.name = name || 'Player';
-    room.players.set(socket.id, { name: socket.data.name, progress: 0, mistakes: 0 });
-    io.to(roomCode).emit('players', Array.from(room.players, ([id, p])=>({id, ...p})));
-    socket.emit('state', { puzzle: room.puzzle, mistakeLimit: room.mistakeLimit, startedAt: room.startedAt, roomCode });
+    socket.data.name = (name||'Player').trim() || 'Player';
+    room.players.set(socket.id, {name:socket.data.name, progress:0, mistakes:0});
+    if(!room.started){
+      io.to(roomCode).emit('pregame', {
+        roomCode,
+        players: [...room.players.values()].map(p=>({name:p.name})),
+        isHost: socket.id===room.creatorId,
+        mistakeLimit: room.mistakeLimit
+      });
+    }else{
+      socket.emit('state', { puzzle: room.puzzle, mistakeLimit: room.mistakeLimit, startedAt: room.startedAt, roomCode });
+      io.to(roomCode).emit('players', Array.from(room.players, ([id,p])=>({id,...p})));
+    }
+  });
+
+  socket.on('setOptions', ({roomCode, mistakeLimit})=>{
+    const room = rooms.get(roomCode);
+    if(!room || socket.id !== room.creatorId || room.started) return;
+    if([3,5,10].includes(Number(mistakeLimit))) room.mistakeLimit = Number(mistakeLimit);
+    io.to(roomCode).emit('pregame', {
+      roomCode,
+      players: [...room.players.values()].map(p=>({name:p.name})),
+      isHost: true,
+      mistakeLimit: room.mistakeLimit
+    });
+  });
+
+  socket.on('startGame', ({roomCode})=>{
+    const room = rooms.get(roomCode);
+    if(!room || socket.id !== room.creatorId || room.started) return;
+    room.started = true;
+    snapshotPlayers(room);
+    room.startedAt = Date.now();
+    io.emit('roomsUpdate'); // hide from lobby
+    io.to(roomCode).emit('state', { puzzle: room.puzzle, mistakeLimit: room.mistakeLimit, startedAt: room.startedAt, roomCode });
+    io.to(roomCode).emit('players', Array.from(room.players, ([id,p])=>({id,...p})));
   });
 
   socket.on('move', ({r,c,n})=>{
-    const code = socket.data.roomCode;
-    const room = rooms.get(code);
-    if(!room) return;
+    const code = socket.data.roomCode; if(!code) return;
+    const room = rooms.get(code); if(!room || !room.started) return;
     const correct = n === room.solved[r][c];
     if(correct){
-      if(room.puzzle[r][c] === 0){
-        room.puzzle[r][c] = n;
-        if(!room.firstBlood){
-          room.firstBlood = socket.id;
-          io.to(code).emit('announce', { text: `${socket.data.name} drew FIRST BLOOD! 👑`, type:'first' });
-        }
-        io.to(code).emit('cell', { r, c, n, correct:true, who: socket.data.name });
+      if(room.puzzle[r][c]===0){
+        room.puzzle[r][c]=n;
+        io.to(code).emit('cell', {r,c,n,correct:true,who:socket.data.name});
       }
     }else{
-      const p = room.players.get(socket.id);
+      const p=room.players.get(socket.id);
       if(p){
         p.mistakes++;
-        io.to(code).emit('players', Array.from(room.players, ([id, pp])=>({id, ...pp})));
-        socket.emit('cell', { r, c, n, correct:false });
-        socket.emit('announce', { text: 'Wrong!', type:'wrong' });
+        io.to(code).emit('players', Array.from(room.players, ([id,pp])=>({id,...pp})));
+        socket.emit('cell', {r,c,n,correct:false});
         if(p.mistakes >= room.mistakeLimit){
-          socket.emit('announce', { text: `Game over — mistakes ${p.mistakes}/${room.mistakeLimit}`, type:'over' });
+          socket.emit('announce', {text:`Game over — mistakes ${p.mistakes}/${room.mistakeLimit}`, type:'over'});
         }
       }
     }
-    const p = room.players.get(socket.id);
+    const p=room.players.get(socket.id);
     if(p){
       const userBoard = room.puzzle;
       p.progress = computeProgress(room.puzzle, userBoard);
-      io.to(code).emit('players', Array.from(room.players, ([id, pp])=>({id, ...pp})));
-      const levels = Array.from(room.players.values()).map(pp=>pp.progress);
-      const max = Math.max(...levels), min = Math.min(...levels);
-      if(p.progress === min && max >= 60){
-        io.to(code).emit('announce', { text: `${p.name}, too slow! 🐢`, type:'slowpoke' });
-      }
+      io.to(code).emit('players', Array.from(room.players, ([id,pp])=>({id,...pp})));
     }
   });
 
@@ -160,11 +187,21 @@ io.on('connection', (socket)=>{
     room.players.delete(socket.id);
     if(room.players.size===0){
       rooms.delete(code);
-    } else {
-      io.to(code).emit('players', Array.from(room.players, ([id, p])=>({id, ...p})));
+    }else{
+      if(!room.started){
+        io.to(code).emit('pregame', {
+          roomCode:code,
+          players: [...room.players.values()].map(p=>({name:p.name})),
+          isHost: socket.id===room.creatorId,
+          mistakeLimit: room.mistakeLimit
+        });
+      }else{
+        io.to(code).emit('players', Array.from(room.players, ([id,p])=>({id,...p})));
+      }
     }
     io.emit('roomsUpdate');
   });
+
 });
 
 const PORT = process.env.PORT || 3000;
